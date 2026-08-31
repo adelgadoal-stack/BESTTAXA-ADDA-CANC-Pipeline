@@ -1,0 +1,173 @@
+BESTTAXA EN R Studio
+
+En Linux:
+Clasificación con las 3 bases de datos (GG2, SILVA Y GTDB)
+
+1. Entrada de datos
+Se utilizaron las secuencias representativas (rep-seqs) generadas a partir del proceso de denoising con DADA2:
+ • 3-rep-seqs-dada2_FINAL_F.qza (el nombre depende de tus archivos)
+ • 2-table-dada2_FINAL_F.qza (el nombre depende de tus archivos)
+
+2. Clasificación taxonómica con SILVA
+Comando utilizado:
+ qiime feature-classifier classify-sklearn \
+   --i-classifier silva-138-99-nb-classifier.qza \
+   --i-reads 3-rep-seqs-dada2_FINAL_F.qza \
+   --p-n-jobs 4 \
+   --o-classification taxonomy-silva.qza
+
+3. Clasificación taxonómica con Greengenes2 (GG2)
+Comando utilizado:
+ qiime feature-classifier classify-sklearn \
+   --i-classifier gg2_2024.09_full_length_classifier.qza \
+   --i-reads 3-rep-seqs-dada2_FINAL_F.qza \
+   --p-n-jobs 4 \
+   --o-classification taxonomy-gg2.qza
+
+4. Clasificación taxonómica con GTDB
+Comando utilizado:
+ qiime feature-classifier classify-sklearn \
+   --i-classifier gtdb_human_stool_weighted_classifier_r220.qza \
+   --i-reads 3-rep-seqs-dada2_FINAL_F.qza \
+   --p-n-jobs 4 \
+   --o-classification taxonomy-gtdb.qza
+
+5. Exportación de resultados
+Los resultados de cada clasificación fueron exportados a formato TSV para su posterior integración:
+ qiime tools export \
+   --input-path taxonomy-*.qza \
+   --output-path export_dir
+
+6. Resultado final
+Se obtuvieron tres archivos de taxonomía independientes (SILVA, GG2 y GTDB), los cuales fueron utilizados como entrada para la construcción del BESTTAX.
+
+En R-Studio
+
+
+En la línea de comandos:
+library(readr)
+library(dplyr)
+library(stringr)
+ 
+ Ajustes estilo PacBio ----
+min_conf <- 0.8
+priority <- c("GG2", "GTDB", "SILVA")  
+# igual al default de PacBio (si quieres cambiar, cambia este orden)
+# ---- Leer ----
+gg2   <- read_tsv("taxonomy_gg2.tsv",   show_col_types = FALSE)
+gtdb  <- read_tsv("taxonomy_GTDB.tsv",  show_col_types = FALSE)
+silva <- read_tsv("taxonomy_silva.tsv", show_col_types = FALSE)
+ 
+fix_id <- function(df){
+  if ("Feature ID" %in% names(df)) df <- df %>% rename(FeatureID = `Feature ID`)
+  df
+}
+gg2 <- fix_id(gg2); gtdb <- fix_id(gtdb); silva <- fix_id(silva)
+ 
+gg2   <- gg2   %>% select(FeatureID, Taxon, Confidence) %>% rename(Taxon_GG2=Taxon,   Conf_GG2=Confidence)
+gtdb  <- gtdb  %>% select(FeatureID, Taxon, Confidence) %>% rename(Taxon_GTDB=Taxon, Conf_GTDB=Confidence)
+silva <- silva %>% select(FeatureID, Taxon, Confidence) %>% rename(Taxon_SILVA=Taxon,Conf_SILVA=Confidence)
+ 
+m <- gg2 %>%
+  full_join(gtdb,  by="FeatureID") %>%
+  full_join(silva, by="FeatureID")
+ 
+# ---- Helpers: detectar si llega a especie o género "real" ----
+has_species <- function(t) !is.na(t) & str_detect(t, "s__") & !str_detect(t, "s__$")
+has_genus   <- function(t) !is.na(t) & str_detect(t, "g__") & !str_detect(t, "g__$")
+ 
+# ---- Selector por prioridad ----
+pick_by_priority <- function(row, want=c("species","genus")){
+  want <- match.arg(want)
+  for (db in priority){
+	tax <- row[[paste0("Taxon_", db)]]
+	cf  <- row[[paste0("Conf_",  db)]]
+ 
+	if (is.na(tax) || is.na(cf) || cf < min_conf) next
+ 
+	if (want == "species" && has_species(tax)) return(list(Source=db, Taxon=tax, Confidence=cf))
+	if (want == "genus"   && has_genus(tax))   return(list(Source=db, Taxon=tax, Confidence=cf))
+  }
+  return(list(Source=NA_character_, Taxon=NA_character_, Confidence=NA_real_))
+}
+ 
+# ---- BESTTAX estilo PacBio: Species -> Genus -> fallback ----
+out <- m %>%
+  rowwise() %>%
+  mutate(
+	pick_species = list(pick_by_priority(cur_data(), "species")),
+	Source = pick_species$Source,
+	Taxon  = pick_species$Taxon,
+	Confidence = pick_species$Confidence,
+ 
+	# si no hay species, intenta genus
+	pick_genus = if (is.na(Source)) list(pick_by_priority(cur_data(), "genus")) else list(NULL),
+	Source = if (is.na(Source)) pick_genus$Source else Source,
+	Taxon  = if (is.na(Taxon))  pick_genus$Taxon  else Taxon,
+	Confidence = if (is.na(Confidence)) pick_genus$Confidence else Confidence
+  ) %>%
+  ungroup() %>%
+  select(`Feature ID`=FeatureID, Taxon, Confidence, Source)
+ 
+# ---- Fallback final: si por el umbral quedaron NA, usa la mejor resolución disponible (sin umbral) ----
+# (Esto evita perder ASVs por ser muy estricto
+ 
+fallback <- m %>%
+  mutate(
+	level = pmax(
+      ifelse(!is.na(Taxon_GG2)   & str_detect(Taxon_GG2,   "s__"), 7L, ifelse(!is.na(Taxon_GG2)   & str_detect(Taxon_GG2,   "g__"), 6L, 0L)),
+      ifelse(!is.na(Taxon_GTDB)  & str_detect(Taxon_GTDB,  "s__"), 7L, ifelse(!is.na(Taxon_GTDB)  & str_detect(Taxon_GTDB,  "g__"), 6L, 0L)),
+  	ifelse(!is.na(Taxon_SILVA) & str_detect(Taxon_SILVA, "s__"), 7L, ifelse(!is.na(Taxon_SILVA) & str_detect(Taxon_SILVA, "g__"), 6L, 0L))
+	)
+  )
+ 
+# Rellenar NA con mejor disponible por nivel y prioridad (sin umbral)
+fix_na <- function(row){
+  if (!is.na(row$Taxon)) return(row)
+  # arma candidatos en orden prioridad
+  for (db in priority){
+	tax <- row[[paste0("Taxon_", db)]]
+	cf  <- row[[paste0("Conf_",  db)]]
+	if (!is.na(tax)) return(list(Taxon=tax, Confidence=cf, Source=paste0(db,"_fallback")))
+  }
+  return(list(Taxon=NA_character_, Confidence=NA_real_, Source=NA_character_))
+}
+ 
+# Aplica fallback
+na_idx <- which(is.na(out$Taxon))
+if (length(na_idx) > 0){
+  fb_rows <- fallback[na_idx, ]
+  fb <- lapply(seq_len(nrow(fb_rows)), function(i) fix_na(fb_rows[i, ]))
+  out$Taxon[na_idx] <- sapply(fb, `[[`, "Taxon")
+  out$Confidence[na_idx] <- as.numeric(sapply(fb, `[[`, "Confidence"))
+  out$Source[na_idx] <- sapply(fb, `[[`, "Source")
+}
+ 
+write_tsv(out, "taxonomy_besttax_PACBIO_like_GG2_GTDB_SILVA.tsv")
+ 
+cat("Guardado: taxonomy_besttax_PACBIO_like_GG2_GTDB_SILVA.tsv\n")
+cat("\n--- Fuente usada ---\n")
+print(out %>% count(Source, sort=TRUE))
+cat("\n--- % especie (s__) ---\n")
+cat(sprintf("%.2f%%\n", mean(str_detect(out$Taxon, "s__"), na.rm=TRUE)*100))
+______________________________________________________________________________
+
+## Metodología de asignación taxonómica
+
+El enfoque de asignación taxonómica "best taxonomy" implementado en este 
+repositorio está inspirado en la estrategia utilizada por el pipeline 
+HiFi-16S-workflow de PacBio (PacificBiosciences), que prioriza la 
+clasificación entre tres bases de referencia en el siguiente orden: 
+GreenGenes2 → GTDB → SILVA, evaluando primero la resolución a nivel de 
+especie y, si no es posible, a nivel de género.
+
+Referencia: PacificBiosciences. HiFi-16S-workflow. 
+https://github.com/PacificBiosciences/HiFi-16S-workflow
+
+## Bases de datos y clasificadores utilizados
+
+- GreenGenes2: gg2_2024.09_full_length_classifier.qza (release 2024.09)
+- GTDB: gtdb_human_stool_weighted_classifier_r220.qza (release r220, 
+  weighted para muestras de heces humanas)
+- SILVA: silva-138-99-nb-classifier.qza (SILVA 138, 99% OTUs)
+- Clasificación realizada con QIIME 2 (qiime feature-classifier classify-sklearn)
