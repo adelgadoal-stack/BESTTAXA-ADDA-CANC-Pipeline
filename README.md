@@ -25,10 +25,10 @@ https://github.com/PacificBiosciences/HiFi-16S-workflow
 
 - ## Entorno de R
 
-- R version: [pegar aquí la salida de sessionInfo()]
-- dplyr: [versión]
-- readr: [versión]
-- stringr: [versión]
+- R version 
+- dplyr
+- readr
+- stringr
 
 - ## Licencia
 
