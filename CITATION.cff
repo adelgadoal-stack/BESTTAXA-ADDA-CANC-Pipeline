@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use this software in your research, please cite it as described below."
+title: "BESTTAXA: A priority-based taxonomic assignment pipeline for full-length 16S rRNA gene sequences"
+type: software
+authors:
+  - family-names: "Delgado-Aldana"
+    given-names: "Andrés"
+  - family-names: "Nieto-Clavijo"
+    given-names: "Carlos"
+version: "1.0.0"
+date-released: 2026-09-09
+repository-code: "https://github.com/adelgadoal-stack/BESTTAXA-ADDA-CANC-Pipeline"
+license: "MIT"
