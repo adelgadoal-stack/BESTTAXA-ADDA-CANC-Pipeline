@@ -3,6 +3,20 @@ BESTTAXA: An adapted pipeline for consensus taxonomic assignment of full-length 
 This workflow was adapted and modified by Andrés David Delgado Aldana for the taxonomic classification of full-length 16S rRNA PacBio HiFi sequences. 
 It integrates classifications obtained from Greengenes2, GTDB and SILVA, applying a minimum confidence threshold of 0.80 and the priority order GG2 → GTDB → SILVA.
 
+## Methodological origin and citation
+
+BESTTAXA is an R-based implementation adapted from the “besttax”
+taxonomic prioritization strategy of the PacBio HiFi-16S-workflow.
+The underlying strategy prioritizes Greengenes2, GTDB, and SILVA
+and evaluates species-level assignments before genus-level assignments.
+
+This repository provides an implementation for integrating taxonomic
+classifications generated with QIIME 2 `classify-sklearn`, using updated
+reference classifiers and an additional fallback procedure.
+
+If you use the implementation provided in this repository, please cite
+BESTTAXA and acknowledge the original PacBio HiFi-16S-workflow.
+
 ## Taxonomic Assignment Methodology
 
 The “best taxonomy” approach implemented in this repository was inspired by the strategy used in PacBio’s HiFi-16S-workflow (Pacific Biosciences). 
