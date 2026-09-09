@@ -36,6 +36,14 @@ dplyr
 readr
 stringr
 
+## How to cite
+
+If you use BESTTAXA in your research, please cite:
+
+Delgado-Aldana, A., & Nieto-Clavijo, C. (2026). *BESTTAXA: A priority-based taxonomic assignment pipeline for full-length 16S rRNA gene sequences* (Version 1.0.0) [Computer software]. GitHub. https://github.com/adelgadoal-stack/BESTTAXA-ADDA-CANC-Pipeline
+
+The underlying taxonomic prioritization strategy was adapted from the PacBio HiFi-16S-workflow, which should also be acknowledged.
+
 ## License
 
 This repository is distributed under the MIT License. See the LICENSE file.
